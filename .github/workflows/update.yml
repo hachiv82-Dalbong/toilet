@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm test
       - name: Build data
         run: node pipeline/build.js
@@ -39,7 +39,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web/data pipeline/cache
-          git diff --cached --quiet || (git commit -m "data: update $(date -u +%F)" && git push)
+          git diff --cached --quiet && exit 0
+          git commit -m "data: update $(date -u +%F)"
+          for i in 1 2 3; do git pull --rebase origin main && git push && exit 0; sleep 10; done
+          exit 1
 
   deploy:
     needs: update

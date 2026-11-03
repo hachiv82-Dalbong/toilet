@@ -73,3 +73,10 @@ test("past-midnight end hour", () => {
 test("semicolon typo", () => {
   assert.deepEqual(parseHours("09:00~18;00"), { type: "range", open: 540, close: 1080 });
 });
+
+test("상시 with conflicting detail follows the detail", () => {
+  assert.deepEqual(hoursFromRecord("상시", "09:00~18:00"), { type: "range", open: 540, close: 1080 });
+  assert.equal(hoursFromRecord("상시", "동절기 폐쇄").type, "unknown");
+  assert.deepEqual(hoursFromRecord("상시", "연중무휴"), { type: "24h" });
+  assert.deepEqual(hoursFromRecord("상시", "24시간"), { type: "24h" });
+});

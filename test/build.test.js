@@ -82,3 +82,20 @@ test("aborts without writing on fetch failure", async () => {
   assert.deepEqual(fs.readdirSync(path.join(outDir, "tiles")), ["1_1.json"]);
   assert.equal(fs.readFileSync(cachePath, "utf8"), '{"x":{"lat":1,"lng":2}}');
 });
+
+test("keeps blank-MNG_NO records apart", async () => {
+  const { outDir, cachePath } = tmp();
+  const meta = await build({ fetchToilets: async () => [{ ...raw("", "서울 A로 1"), RSTRM_NM: "가" }, { ...raw("", "서울 A로 2"), RSTRM_NM: "나" }], geocode: fakeGeocode, outDir, cachePath, today: TODAY });
+  assert.equal(meta.count, 2);
+});
+
+test("keeps checkpointed cache when geocoding crashes", async () => {
+  const { outDir, cachePath } = tmp();
+  const geocode = async (addrs, cache, saveCache) => {
+    saveCache({ ...cache, "서울 A로 1": { lat: 37.5663, lng: 126.9779 } });
+    throw new Error("timeout");
+  };
+  await assert.rejects(build({ fetchToilets: async () => [raw("1", "서울 A로 1")], geocode, outDir, cachePath, today: TODAY }), /timeout/);
+  assert.deepEqual(readJson(cachePath), { "서울 A로 1": { lat: 37.5663, lng: 126.9779 } });
+  assert.ok(!fs.existsSync(path.join(outDir, "meta.json")));
+});

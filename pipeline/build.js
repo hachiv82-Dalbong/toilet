@@ -52,11 +52,14 @@ export async function build({ fetchToilets, geocode, outDir, cachePath, today })
   }
   const records = [...byId.values()];
 
+  // 지오코딩은 몇 시간 걸릴 수 있으므로 중간에 죽어도 그때까지의 결과는 남게 saveCache로 수시로 저장한다
+  const saveCache = (c) => writeJson(cachePath, c);
   const { cache } = await geocode(
     records.map((r) => r.addr),
-    readJsonOr(cachePath, {})
+    readJsonOr(cachePath, {}),
+    saveCache
   );
-  writeJson(cachePath, cache);
+  saveCache(cache);
 
   const tiles = new Map();
   let count = 0;
@@ -104,12 +107,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const serviceKey = requireEnv("SERVICE_KEY");
   const keys = { searchKey: requireEnv("JUSO_SEARCH_KEY"), coordKey: requireEnv("JUSO_COORD_KEY") };
   const budget = Number(process.env.GEOCODE_BUDGET ?? 20000);
+  // Actions 작업 제한(300분) 안에 타일 생성과 커밋까지 끝나도록 지오코딩은 시작 후 4시간에서 끊는다
+  const deadline = Date.now() + Number(process.env.GEOCODE_MAX_MINUTES ?? 240) * 60000;
   const today = kstToday();
   try {
     const meta = await build({
       fetchToilets: () => fetchAllToilets({ serviceKey }),
-      geocode: async (addrs, cache) => {
-        const result = await geocodeAll(addrs, cache, { geocodeOne: (a) => jusoGeocode(a, keys), budget, today });
+      geocode: async (addrs, cache, saveCache) => {
+        const result = await geocodeAll(addrs, cache, {
+          geocodeOne: (a) => jusoGeocode(a, keys),
+          budget,
+          today,
+          deadline,
+          checkpointEvery: 500,
+          onCheckpoint: saveCache,
+        });
         console.log("geocode", JSON.stringify(result.stats));
         return result;
       },

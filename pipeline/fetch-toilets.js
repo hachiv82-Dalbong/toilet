@@ -14,8 +14,11 @@ async function fetchPage({ serviceKey, fetchFn, pageNo, numOfRows }) {
   }
   const { header, body } = json.response ?? {};
   if (header?.resultCode !== "0") throw new Error(`API resultCode ${header?.resultCode}: ${header?.resultMsg}`);
+  const totalCount = Number(body?.totalCount);
+  // totalCount가 없으면 페이지 수를 알 수 없어 한 페이지만으로 전체를 덮어쓰게 되므로 실패시킨다
+  if (!Number.isFinite(totalCount) || totalCount <= 0) throw new Error(`invalid totalCount: ${body?.totalCount}`);
   const item = body.items?.item ?? [];
-  return { totalCount: Number(body.totalCount), items: Array.isArray(item) ? item : [item] };
+  return { totalCount, items: Array.isArray(item) ? item : [item] };
 }
 
 async function fetchPageWithRetry(opts, retryDelayMs) {

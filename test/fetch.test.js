@@ -94,3 +94,12 @@ test("fetchAll throws when far fewer records than totalCount", async () => {
   const fetchFn = async () => okPage(1000, 0); // totalCount는 1000인데 빈 페이지
   await assert.rejects(fetchAllToilets({ serviceKey: "k", fetchFn, retryDelayMs: 0 }), /incomplete/);
 });
+
+test("mapRecord falls back to name|addr id when MNG_NO is blank", () => {
+  assert.equal(mapRecord({ ...items[0], MNG_NO: "" }).id, "황령산레포츠공원(황령산레포츠공원 부설주차장 옆)|부산광역시 부산진구 진남로328번길 99");
+});
+
+test("fetchAll throws when totalCount is missing", async () => {
+  const fetchFn = async () => ({ ok: true, status: 200, json: async () => ({ response: { header: { resultCode: "0" }, body: { items: { item: [{ MNG_NO: "1" }] } } } }) });
+  await assert.rejects(fetchAllToilets({ serviceKey: "k", fetchFn, retryDelayMs: 0 }), /totalCount/);
+});

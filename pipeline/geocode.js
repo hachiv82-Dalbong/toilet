@@ -15,28 +15,43 @@ export function searchKeyword(addr) {
   return addr.split(",")[0].trim();
 }
 
+// E0005~E0013은 검색어 자체의 문제(너무 짧음, 특수문자 등)라 다시 해도 같다 → "찾지 못함"으로 캐시한다.
+// 그 밖의 코드(키 오류, 시스템 오류)는 throw해서 다음 실행에 다시 시도한다.
+const INPUT_ERROR = /^E00(0[5-9]|1[0-3])$/;
+
 async function getJuso(url, fetchFn) {
   const res = await fetchFn(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const { results } = await res.json();
-  const { errorCode, errorMessage } = results?.common ?? {};
+  const { errorCode, errorMessage, totalCount } = results?.common ?? {};
+  if (INPUT_ERROR.test(errorCode)) return { list: [], totalCount: 0 };
   if (errorCode !== "0") throw new Error(`juso ${errorCode}: ${errorMessage}`);
-  return results.juso ?? [];
+  return { list: results.juso ?? [], totalCount: Number(totalCount ?? (results.juso ?? []).length) };
 }
 
+const squash = (s) => String(s ?? "").replace(/\s+/g, "");
+
 export async function jusoGeocode(addr, { searchKey, coordKey }, fetchFn = fetch) {
-  const keyword = encodeURIComponent(searchKeyword(addr));
-  const [hit] = await getJuso(`${SEARCH_URL}?confmKey=${searchKey}&currentPage=1&countPerPage=1&keyword=${keyword}&resultType=json`, fetchFn);
+  const keyword = searchKeyword(addr);
+  const search = await getJuso(
+    `${SEARCH_URL}?confmKey=${encodeURIComponent(searchKey)}&currentPage=1&countPerPage=5&keyword=${encodeURIComponent(keyword)}&resultType=json`,
+    fetchFn
+  );
+  // 검색은 비슷한 주소도 함께 돌려준다. 도로명주소가 정확히 같은 후보를 쓰고, 없으면 후보가 하나뿐일 때만 믿는다.
+  // 급한 사람을 엉뚱한 곳으로 보내느니 지도에서 빼는 편이 낫다.
+  const exact = search.list.find((j) => squash(j.roadAddrPart1) === squash(keyword));
+  const hit = exact ?? (search.totalCount === 1 ? search.list[0] : null);
   if (!hit) return null;
   const params = COORD_PARAMS.map((k) => `${k}=${encodeURIComponent(hit[k] ?? "")}`).join("&");
-  const [coord] = await getJuso(`${COORD_URL}?confmKey=${coordKey}&${params}&resultType=json`, fetchFn);
+  const { list: [coord] } = await getJuso(`${COORD_URL}?confmKey=${encodeURIComponent(coordKey)}&${params}&resultType=json`, fetchFn);
   if (!coord?.entX || !coord?.entY) return null;
   const { lat, lng } = utmkToWgs84(Number(coord.entX), Number(coord.entY));
   return [lat, lng];
 }
 
 // cache: { [addr]: { lat, lng } | { failedAt: "YYYY-MM-DD" } }. budget은 이번 실행에서 조회할 주소 수 상한.
-export async function geocodeAll(addrs, cache, { geocodeOne, budget, today, delayMs = 50 }) {
+// deadline(ms, now() 기준)을 넘기면 멈추고, checkpointEvery건마다 onCheckpoint(cache)로 중간 저장한다.
+export async function geocodeAll(addrs, cache, { geocodeOne, budget, today, delayMs = 50, deadline = Infinity, now = Date.now, checkpointEvery = 0, onCheckpoint }) {
   const next = { ...cache };
   const stats = { hit: 0, newOk: 0, newFailed: 0, knownFailed: 0, pending: 0 };
   let calls = 0;
@@ -52,7 +67,7 @@ export async function geocodeAll(addrs, cache, { geocodeOne, budget, today, dela
       stats.knownFailed++;
       continue;
     }
-    if (calls >= budget || consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+    if (calls >= budget || consecutiveErrors >= MAX_CONSECUTIVE_ERRORS || now() >= deadline) {
       stats.pending++;
       continue;
     }
@@ -73,6 +88,7 @@ export async function geocodeAll(addrs, cache, { geocodeOne, budget, today, dela
       consecutiveErrors++;
       stats.pending++;
     }
+    if (checkpointEvery && onCheckpoint && calls % checkpointEvery === 0) onCheckpoint(next);
   }
   return { cache: next, stats };
 }

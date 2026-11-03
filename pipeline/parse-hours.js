@@ -30,9 +30,13 @@ export function parseHours(text) {
 }
 
 // API의 OPN_HR(구분)과 OPN_HR_DTL(상세). null은 미개방 → 데이터에서 제외한다.
+// 상시인데 세부 시간이 따로 적혀 있으면 더 구체적인 세부 시간을 따른다.
+const ALWAYS_DETAILS = new Set(["", "상시", "연중무휴", "0", "-"]);
+
 export function hoursFromRecord(category, detail) {
   const c = String(category ?? "").trim();
-  if (c === "상시") return { type: "24h" };
+  const d = String(detail ?? "").trim();
+  if (c === "상시") return ALWAYS_DETAILS.has(d) ? { type: "24h" } : parseHours(d);
   if (c === "정시") return parseHours(detail);
   if (c === "미개방") return null;
   return UNKNOWN;

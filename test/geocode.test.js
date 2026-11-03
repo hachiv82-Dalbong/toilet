@@ -109,3 +109,59 @@ test("jusoGeocode throws on API error code", async () => {
   const fetchFn = async () => json({ results: { common: { errorCode: "E0001", errorMessage: "승인되지 않은 KEY 입니다." } } });
   await assert.rejects(jusoGeocode("주소", KEYS, fetchFn), /E0001/);
 });
+
+test("stops at deadline and leaves the rest pending", async () => {
+  let t = 0;
+  const one = counter(async () => {
+    t += 1000;
+    return [37, 127];
+  });
+  const { stats } = await geocodeAll(["A", "B", "C", "D"], {}, { geocodeOne: one, budget: 100, today: TODAY, delayMs: 0, deadline: 1500, now: () => t });
+  assert.equal(one.calls.length, 2);
+  assert.equal(stats.pending, 2);
+});
+
+test("checkpoints the cache every N lookups", async () => {
+  const saved = [];
+  const one = counter(async () => [37, 127]);
+  await geocodeAll(["A", "B", "C", "D", "E"], {}, { geocodeOne: one, budget: 100, today: TODAY, delayMs: 0, checkpointEvery: 2, onCheckpoint: (c) => saved.push(Object.keys(c).length) });
+  assert.deepEqual(saved, [2, 4]);
+});
+
+const searchOk = (juso, totalCount = String(juso.length)) => json({ results: { common: { errorCode: "0", totalCount }, juso } });
+
+test("jusoGeocode treats input-error codes as not found", async () => {
+  const fetchFn = async () => json({ results: { common: { errorCode: "E0008", errorMessage: "검색어는 두글자 이상 입력되어야 합니다." } } });
+  assert.equal(await jusoGeocode("가", KEYS, fetchFn), null);
+});
+
+test("jusoGeocode rejects ambiguous search results", async () => {
+  const p = wgs84ToUtmk(35.09, 129.04);
+  const fetchFn = async (url) => (url.includes("addrLinkApi.do") ? searchOk([JUSO], "3") : searchOk([{ entX: String(p.x), entY: String(p.y) }]));
+  assert.equal(await jusoGeocode("부산광역시 영도구", KEYS, fetchFn), null);
+});
+
+test("jusoGeocode URL-encodes confmKey", async () => {
+  const urls = [];
+  const fetchFn = async (url) => {
+    urls.push(url);
+    return searchOk([]);
+  };
+  await jusoGeocode("주소", { searchKey: "a+b/c=", coordKey: "x" }, fetchFn);
+  assert.ok(urls[0].includes("confmKey=a%2Bb%2Fc%3D"), urls[0]);
+});
+
+test("jusoGeocode picks the exact road-address match among several", async () => {
+  const p = wgs84ToUtmk(37.5663, 126.9779);
+  const urls = [];
+  const exact = { ...JUSO, roadAddrPart1: "서울특별시 중구 세종대로 110", buldMnnm: "110" };
+  const other = { ...JUSO, roadAddrPart1: "서울특별시 중구 세종대로14길 20-2", buldMnnm: "20" };
+  const fetchFn = async (url) => {
+    urls.push(url);
+    return url.includes("addrLinkApi.do") ? searchOk([other, exact], "2") : searchOk([{ entX: String(p.x), entY: String(p.y) }]);
+  };
+  const r = await jusoGeocode("서울특별시 중구 세종대로 110", KEYS, fetchFn);
+  assert.ok(r && Math.abs(r[0] - 37.5663) < 1e-6);
+  assert.ok(urls[0].includes("countPerPage=5"));
+  assert.ok(urls[1].includes("buldMnnm=110"));
+});

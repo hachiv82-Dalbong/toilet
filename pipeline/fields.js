@@ -19,9 +19,10 @@ export function mapRecord(raw) {
   const road = clean(raw.LCTN_ROAD_NM_ADDR).replace(/\s*\([^()]*\)$/, "");
   const addr = road || clean(raw.LCTN_LOTNO_ADDR);
   if (!addr) return null;
+  const name = clean(raw.RSTRM_NM);
   return {
-    id: clean(raw.MNG_NO),
-    name: clean(raw.RSTRM_NM),
+    id: clean(raw.MNG_NO) || `${name}|${addr}`,
+    name,
     addr,
     hoursCategory: clean(raw.OPN_HR),
     hoursDetail: clean(raw.OPN_HR_DTL),

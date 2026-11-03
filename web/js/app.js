@@ -2,6 +2,7 @@ import { formatDistance, walkMinutes } from "./geo.js";
 import { tileKeysAround, loadTiles } from "./tiles.js";
 import { rankToilets, pickRecommendation } from "./pick.js";
 import { navLinks } from "./navlinks.js";
+import { locationMessage } from "./locate-error.js";
 
 const L = window.L;
 const SEOUL_CITY_HALL = { lat: 37.5663, lng: 126.9779 };
@@ -129,13 +130,15 @@ function locate() {
     const [lat, lng] = at.split(",").map(Number);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return Promise.resolve({ lat, lng });
   }
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error("no geolocation"));
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      reject,
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+  const once = (options) =>
+    new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error("no geolocation"));
+      navigator.geolocation.getCurrentPosition((p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }), reject, options);
+    });
+  // 지하·실내에서는 정밀 위치가 자주 실패하므로, 권한 거부가 아니면 대략적인 위치로 한 번 더 시도한다
+  return once({ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }).catch((err) => {
+    if (err?.code === 1) throw err;
+    return once({ enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
   });
 }
 
@@ -155,8 +158,8 @@ async function start() {
   let me;
   try {
     me = await locate();
-  } catch {
-    showMessage("위치 권한이 필요해요", "다시 시도");
+  } catch (err) {
+    showMessage(locationMessage(err), "다시 시도");
     return;
   }
   showMe(me);
