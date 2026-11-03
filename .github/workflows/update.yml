@@ -1,0 +1,61 @@
+name: update-and-deploy
+
+on:
+  schedule:
+    - cron: "0 18 * * 0" # 월요일 03:00 KST
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["web/**"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm test
+      - name: Build data
+        run: node pipeline/build.js
+        env:
+          SERVICE_KEY: ${{ secrets.SERVICE_KEY }}
+          JUSO_SEARCH_KEY: ${{ secrets.JUSO_SEARCH_KEY }}
+          JUSO_COORD_KEY: ${{ secrets.JUSO_COORD_KEY }}
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/data pipeline/cache
+          git diff --cached --quiet || (git commit -m "data: update $(date -u +%F)" && git push)
+
+  deploy:
+    needs: update
+    # push로 실행되면 update는 건너뛰고 배포만 한다. update가 실패하면 배포하지 않아 기존 사이트가 유지된다.
+    if: always() && (needs.update.result == 'success' || needs.update.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
