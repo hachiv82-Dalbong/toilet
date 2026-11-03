@@ -4,7 +4,9 @@
 
 **Goal:** 휴대폰으로 URL을 열면 지금 열려 있는 가장 가까운 공중화장실을 지도와 카드로 보여 주고, 카카오/네이버/구글 길찾기로 넘겨 주는 정적 웹페이지와, 행정안전부 API로 매주 데이터를 갱신하는 파이프라인.
 
-**Architecture:** GitHub Actions가 주 1회 행정안전부 API → VWorld 지오코딩(캐시) → 개방시간 해석 → 0.05° 격자 타일 JSON 생성 → GitHub Pages 배포. 페이지는 서버 없이 내 위치 주변 타일만 읽어 거리·열림 상태를 계산한다.
+> **Revision 1 (2026-11-03):** VWorld 약관이 결과 저장을 금지해서 지오코딩을 도로명주소 API로 바꿨다. 실제 API 응답을 확인한 결과 개방시간은 분류값(`상시`/`정시`/`미개방`)이었다. 이 두 변경은 문서 끝의 **Revision 1** 절에 정리했고, Task 2b, 4, 5에서는 그 절이 원래 내용보다 우선한다.
+
+**Architecture:** GitHub Actions가 주 1회 행정안전부 API → 도로명주소 API 지오코딩(캐시) → 개방시간 해석 → 0.05° 격자 타일 JSON 생성 → GitHub Pages 배포. 페이지는 서버 없이 내 위치 주변 타일만 읽어 거리·열림 상태를 계산한다.
 
 **Tech Stack:** Node.js 20 (ESM, 의존성 없음, 테스트는 `node --test`), 바닐라 HTML/CSS/JS, Leaflet 1.9.4 (unpkg CDN) + OpenStreetMap 타일, GitHub Actions + GitHub Pages.
 
@@ -12,9 +14,10 @@
 
 ## Global Constraints
 
-- API 키(`SERVICE_KEY`, `VWORLD_KEY`)는 환경변수 / GitHub Secrets로만 읽는다. 저장소와 `web/` 어디에도 키가 들어가면 안 된다.
-- 행정안전부 API: `https://apis.data.go.kr/1741000/public_restroom_info_v2`, `numOfRows` 최대 100, `returnType=json`. 개발계정 일 10,000건.
-- 지오코더는 VWorld만 사용한다. 카카오 API는 쓰지 않는다.
+- API 키(`SERVICE_KEY`, `JUSO_SEARCH_KEY`, `JUSO_COORD_KEY`)는 환경변수 / GitHub Secrets로만 읽는다. 로컬에서는 git이 무시하는 `.env`에 둔다. 저장소와 `web/` 어디에도 키가 들어가면 안 된다.
+- 행정안전부 API: `https://apis.data.go.kr/1741000/public_restroom_info_v2/info_v2`, `numOfRows` 최대 100, `returnType=json`. 개발계정 일 10,000건. 전국 약 53,600건.
+- 지오코더는 행정안전부 도로명주소 API(검색 + 좌표제공)만 사용한다. VWorld, 카카오, 네이버는 결과 저장을 금지해서 쓰지 않는다.
+- 개방시간: `상시` → 24h, `정시` → `OPN_HR_DTL` 해석, `미개방` → 데이터에서 제외, 그 밖의 값 → unknown.
 - 열림 상태는 `"open" | "unknown" | "closed"` 세 가지다. 애매하면 절대 `"open"`이 아니다.
 - 화면 문구(고정): `지금 열림`, `운영시간 확인 필요`, `닫힘`, `위치 권한이 필요해요`, 경고 `열려 있는지 확인되지 않았어요. 개방시간: {원문}`.
 - 도보 시간 = 직선거리 ÷ 67 m/분, 올림, `약 N분`으로 표기한다.
@@ -452,3 +455,84 @@ test("aborts without writing on fetch failure", ...)          // fetchToilets re
 - [ ] **Step 4:** 배포 URL로 `NAVER_APPNAME`을 확정하고 커밋·push한다 → 재배포된다.
 - [ ] **Step 5:** 배포 URL을 브라우저 패널에서 `?at=37.5663,126.9779`로 열어 카드가 뜨는지 확인한다. 사용자에게 실제 휴대폰으로 열어 위치 허용 → 카드 → 세 길찾기 버튼이 앱/웹으로 넘어가는지 확인을 부탁한다.
 - [ ] **Step 6:** 커밋 `ci: weekly data update and Pages deploy`
+
+---
+
+## Revision 1 (2026-11-03)
+
+### Task 2b: 개방시간 구분값 + 세부 시간 해석 확장
+
+**Files:** Modify `pipeline/parse-hours.js`, Test `test/hours.test.js`
+
+**Interfaces:**
+- Produces: `hoursFromRecord(category: string, detail: string) -> Hours | null`. `null`이면 `미개방`이고, Task 6에서 제외한다.
+  - `상시` → `{type:"24h"}`
+  - `정시` → `parseHours(detail)`
+  - `미개방` → `null`
+  - 그 밖의 값이나 빈칸 → `{type:"unknown"}`. 공백은 지우고 비교한다.
+- `parseHours` 확장
+  - 종료 시각이 24시를 넘으면(`25:00`, 최대 `30:00`) 1440을 빼서 자정을 넘기는 범위로 본다. `05:00~25:00` → `{open:300, close:60}`
+  - 시와 분 구분자로 `;`도 허용한다(`18;00`).
+  - `(평일)`이나 휴관 문구처럼 요일 조건이 붙으면 지금처럼 unknown으로 둔다.
+
+테스트 (기존 파일에 추가):
+```js
+import { hoursFromRecord } from "../pipeline/parse-hours.js";
+test("category 상시 -> 24h", () => { assert.deepEqual(hoursFromRecord("상시", ""), {type:"24h"}); assert.deepEqual(hoursFromRecord(" 상시 ", "상시"), {type:"24h"}); });
+test("category 정시 parses detail", () => { assert.deepEqual(hoursFromRecord("정시", "09:00~18:00"), {type:"range",open:540,close:1080}); assert.equal(hoursFromRecord("정시", "근무시간 내").type, "unknown"); });
+test("category 미개방 -> null", () => { assert.equal(hoursFromRecord("미개방", "0"), null); });
+test("other category -> unknown", () => { assert.equal(hoursFromRecord("", "").type, "unknown"); assert.equal(hoursFromRecord("기타", "").type, "unknown"); });
+test("past-midnight end hour", () => { assert.deepEqual(parseHours("05:00~25:00"), {type:"range",open:300,close:60}); assert.equal(parseHours("05:00~31:00").type, "unknown"); });
+test("semicolon typo", () => { assert.deepEqual(parseHours("09:00~18;00"), {type:"range",open:540,close:1080}); });
+```
+
+### Task 4 (변경): 필드 매핑 확정
+
+Task 4 Step 1의 확인은 끝났다. 결과는 다음과 같다.
+
+| 의미 | 응답 필드명 |
+|---|---|
+| 고유 ID | `MNG_NO` |
+| 화장실명 / 도로명주소 / 지번주소 | `RSTRM_NM` / `LCTN_ROAD_NM_ADDR` / `LCTN_LOTNO_ADDR` |
+| 개방시간 구분 / 상세 | `OPN_HR` / `OPN_HR_DTL` |
+| 남 / 여 | `MALE_TOILT_CNT`+`MALE_URNL_CNT` / `FEMALE_TOILT_CNT` |
+| 장애인 | `MALE_FRDBL_TOILT_CNT`+`MALE_FRDBL_URNL_CNT`+`FEMALE_FRDBL_TOILT_CNT` |
+| 어린이 | `MALE_CHLD_TOILT_CNT`+`MALE_CHLD_URNL_CNT`+`FEMALE_CHLD_TOILT_CNT` |
+| 아이템 배열 / totalCount / 결과코드 | `response.body.items.item` / `response.body.totalCount` / `response.header.resultCode`(`"0"`이면 정상) |
+
+- `mapRecord(raw) -> { id, name, addr, hoursCategory, hoursDetail, facilities } | null`
+  - `addr`는 도로명주소에서 끝의 `(…)`를 뺀 값이다. 도로명주소가 비어 있으면 지번주소를 쓰고, 둘 다 비어 있으면 `null`을 돌려준다.
+  - 각 시설 수는 위 필드의 합이다. 숫자가 아닌 값은 0으로 치고, 모든 필드가 빈 값이면 `null`이다.
+- 데이터 목록이 아닌 오류 응답(`OpenAPI_ServiceResponse`나 `resultCode !== "0"`)은 throw한다.
+- Task 6에서 `hoursText`는 `hoursDetail || hoursCategory`이다.
+
+### Task 5 (변경): 도로명주소 API 지오코딩
+
+**Files:** Create `pipeline/utmk.js`, `pipeline/geocode.js`; Test `test/utmk.test.js`, `test/geocode.test.js`
+
+**Interfaces:**
+- `utmkToWgs84(x, y) -> { lat, lng }`, `wgs84ToUtmk(lat, lng) -> { x, y }`
+  - EPSG:5179 기준이다. GRS80(a=6378137, f=1/298.257222101), 원점 위도 38°, 중앙 경선 127.5°, k0=0.9996, FE=1,000,000, FN=2,000,000. 횡메르카토르 정·역변환 급수(Snyder)를 쓴다.
+- `jusoGeocode(addr, { searchKey, coordKey }, fetchFn) -> Promise<[lat, lng] | null>`
+  1. `https://business.juso.go.kr/addrlink/addrLinkApi.do?confmKey=…&currentPage=1&countPerPage=1&keyword=${enc(addr)}&resultType=json`
+     - `results.common.errorCode !== "0"`이면 throw한다.
+     - `results.juso`가 비어 있으면 `null`을 돌려준다.
+  2. 첫 결과의 `admCd, rnMgtSn, udrtYn, buldMnnm, buldSlno`로 `https://business.juso.go.kr/addrlink/addrCoordApi.do?confmKey=…&admCd=…&rnMgtSn=…&udrtYn=…&buldMnnm=…&buldSlno=…&resultType=json`를 호출한다.
+     - 응답의 `entX, entY`를 `utmkToWgs84`로 바꾼다.
+     - 좌표가 비어 있으면 `null`이다.
+  - 형식은 키를 발급받은 뒤 실제 응답으로 확인한다. 다르면 이 줄을 고치고 ledger에 Ruling을 남긴다.
+- `geocodeAll(addrs, cache, { geocodeOne, budget, today, delayMs = 50 }) -> Promise<{ cache, stats }>`. 원래 Task 5 동작과 같고, 지오코더만 `geocodeOne(addr)`으로 주입받는다. `budget`은 주소 수 기준이다.
+- `GEOCODE_BUDGET` 기본값은 20000 주소다. 한도를 확인하면 바꾼다.
+
+테스트:
+```js
+// test/utmk.test.js
+test("origin maps to false easting/northing", () => { const p = wgs84ToUtmk(38, 127.5); assert.ok(Math.abs(p.x - 1000000) < 0.01 && Math.abs(p.y - 2000000) < 0.01); });
+test("round trip within 1cm across Korea", () => { for (const [lat,lng] of [[37.5663,126.9779],[35.1796,129.0756],[33.4996,126.5312],[38.2,128.6]]) { const p = wgs84ToUtmk(lat,lng); const q = utmkToWgs84(p.x,p.y); assert.ok(Math.abs(q.lat-lat)<1e-7 && Math.abs(q.lng-lng)<1e-7); } });
+test("Seoul is roughly 953km E / 1952km N", () => { const p = wgs84ToUtmk(37.5663, 126.9779); assert.ok(Math.abs(p.x-953900)<2000 && Math.abs(p.y-1952000)<2000, JSON.stringify(p)); });
+```
+`test/geocode.test.js`: 원래 Task 5의 여섯 테스트에 `geocodeOne`을 가짜로 주입한다. 여기에 `jusoGeocode` 테스트를 더한다. 가짜 fetch로 검색 응답 → 좌표 응답을 이어 받아 WGS84를 돌려주는지, 검색 결과가 0건이면 null인지, errorCode가 "E0001"이면 throw하는지 확인한다.
+
+### Task 6/8 영향
+- Task 6 `build`에서 `hoursFromRecord`가 `null`인 레코드는 제외하고 `skipped.notOpen`으로 센다.
+- Task 8 Secrets는 `SERVICE_KEY`, `JUSO_SEARCH_KEY`, `JUSO_COORD_KEY` 세 개다.
