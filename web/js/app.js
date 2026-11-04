@@ -3,30 +3,15 @@ import { tileKeysAround, loadTiles } from "./tiles.js";
 import { rankToilets, pickRecommendation } from "./pick.js";
 import { navLinks } from "./navlinks.js";
 import { locationMessage } from "./locate-error.js";
+import { createMap, pinsToDraw } from "./map.js";
 
-const L = window.L;
 const SEOUL_CITY_HALL = { lat: 37.5663, lng: 126.9779 };
 const STATUS_LABEL = { open: "지금 열림", unknown: "운영시간 확인 필요", closed: "닫힘" };
-const PIN = {
-  recommended: { radius: 11, color: "#ffffff", weight: 3, fillColor: "#e8442e", fillOpacity: 1 },
-  open: { radius: 7, color: "#ffffff", weight: 2, fillColor: "#1f9d3a", fillOpacity: 1 },
-  unknown: { radius: 7, color: "#ffffff", weight: 2, fillColor: "#f2b705", fillOpacity: 1 },
-  closed: { radius: 6, color: "#ffffff", weight: 2, fillColor: "#9aa0a8", fillOpacity: 1 },
-};
 
 const card = document.getElementById("card");
 const sheet = document.getElementById("sheet");
 const source = document.getElementById("source");
-
-// tolerance: 작은 핀도 손가락으로 누르기 쉽게 터치 인식 범위를 넓힌다
-const map = L.map("map", { zoomControl: false, renderer: L.canvas({ tolerance: 12 }) }).setView([SEOUL_CITY_HALL.lat, SEOUL_CITY_HALL.lng], 15);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-}).addTo(map);
-map.attributionControl.setPosition("topright");
-const pins = L.layerGroup().addTo(map);
-let meMarker = null;
+const mapView = createMap(window.naver, "map", SEOUL_CITY_HALL);
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -96,34 +81,6 @@ function showToilet(t, warning) {
   card.replaceChildren(...nodes);
 }
 
-function drawPins(ranked, recommended) {
-  pins.clearLayers();
-  // 추천 핀이 위에 오도록 마지막에 그린다
-  for (const t of [...ranked].reverse()) {
-    if (t === recommended) continue;
-    L.circleMarker([t.lat, t.lng], PIN[t.status]).on("click", () => showToilet(t, t.status === "unknown")).addTo(pins);
-  }
-  if (recommended) {
-    L.circleMarker([recommended.lat, recommended.lng], PIN.recommended)
-      .on("click", () => showToilet(recommended, recommended.status === "unknown"))
-      .addTo(pins);
-  }
-}
-
-function showMe(me) {
-  if (meMarker) meMarker.remove();
-  meMarker = L.marker([me.lat, me.lng], {
-    icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
-    interactive: false,
-    keyboard: false,
-  }).addTo(map);
-}
-
-function frame(me, t) {
-  const pad = sheet.offsetHeight + 24;
-  map.fitBounds(L.latLngBounds([me.lat, me.lng], [t.lat, t.lng]), { paddingTopLeft: [40, 40], paddingBottomRight: [40, pad], maxZoom: 16 });
-}
-
 function locate() {
   const at = new URLSearchParams(location.search).get("at");
   if (at) {
@@ -162,21 +119,22 @@ async function start() {
     showMessage(locationMessage(err), "다시 시도");
     return;
   }
-  showMe(me);
+  mapView.showMe(me);
+  let found;
   try {
-    const { ranked, pick } = await findNearest(me);
-    drawPins(ranked, pick?.toilet);
-    if (!pick) {
-      map.setView([me.lat, me.lng], 15);
-      showMessage("주변에서 화장실을 찾지 못했어요");
-      return;
-    }
-    showToilet(pick.toilet, pick.warning);
-    frame(me, pick.toilet);
+    found = await findNearest(me);
   } catch {
-    map.setView([me.lat, me.lng], 15);
+    mapView.center(me);
     showMessage("데이터를 불러오지 못했어요", "다시 시도");
+    return;
   }
+  const { ranked, pick } = found;
+  // 카드를 먼저 그린다. 지도에 문제가 있어도 가장 가까운 화장실은 알 수 있어야 한다.
+  if (pick) showToilet(pick.toilet, pick.warning);
+  else showMessage("주변에서 화장실을 찾지 못했어요");
+  mapView.setPins(pinsToDraw(ranked, pick?.toilet), pick?.toilet, (t) => showToilet(t, t.status === "unknown"));
+  if (pick) mapView.frame(me, pick.toilet, sheet.offsetHeight + 24);
+  else mapView.center(me);
 }
 
 fetchJson("data/meta.json")

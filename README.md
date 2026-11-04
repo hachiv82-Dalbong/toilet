@@ -41,4 +41,4 @@ set -a; . ./.env; set +a; GEOCODE_BUDGET=200 node pipeline/build.js
 
 - 행정안전부 공중화장실정보 조회서비스 (공공데이터포털)
 - 행정안전부 도로명주소 API (business.juso.go.kr)
-- 지도: © OpenStreetMap contributors
+- 지도: NAVER Maps (Dynamic Map). Client ID는 페이지 소스에 공개되는 값이고, 네이버 클라우드에 등록한 URL에서만 작동해요.
