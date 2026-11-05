@@ -12,6 +12,7 @@ const card = document.getElementById("card");
 const sheet = document.getElementById("sheet");
 const source = document.getElementById("source");
 const mapView = createMap(window.naver, "map", SEOUL_CITY_HALL);
+const metaLoaded = fetchJson("data/meta.json").catch(() => null);
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -110,6 +111,11 @@ async function findNearest(me) {
   return { ranked, pick: null };
 }
 
+function notFoundMessage(meta) {
+  const area = meta?.regions?.join("·");
+  return area ? `주변에서 화장실을 찾지 못했어요. 지금은 ${area} 지역만 제공해요.` : "주변에서 화장실을 찾지 못했어요";
+}
+
 async function start() {
   showMessage("가까운 화장실을 찾는 중…");
   let me;
@@ -131,16 +137,14 @@ async function start() {
   const { ranked, pick } = found;
   // 카드를 먼저 그린다. 지도에 문제가 있어도 가장 가까운 화장실은 알 수 있어야 한다.
   if (pick) showToilet(pick.toilet, pick.warning);
-  else showMessage("주변에서 화장실을 찾지 못했어요");
+  else showMessage(notFoundMessage(await metaLoaded));
   mapView.setPins(pinsToDraw(ranked, pick?.toilet), pick?.toilet, (t) => showToilet(t, t.status === "unknown"));
   if (pick) mapView.frame(me, pick.toilet, sheet.offsetHeight + 24);
   else mapView.center(me);
 }
 
-fetchJson("data/meta.json")
-  .then((meta) => {
-    source.textContent = `데이터: 행정안전부 · 갱신 ${meta.updatedAt}`;
-  })
-  .catch(() => {});
+metaLoaded.then((meta) => {
+  if (meta) source.textContent = `데이터: 행정안전부 · 갱신 ${meta.updatedAt}`;
+});
 
 start();

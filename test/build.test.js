@@ -48,7 +48,7 @@ test("excludes no-address, not-open and ungeocoded, counts them", async () => {
   const fetchToilets = async () => [raw("1", "서울 A로 1"), raw("2", ""), raw("3", "부산 B로 3", "미개방", "0"), raw("4", "없는 주소")];
   const meta = await build({ fetchToilets, geocode: fakeGeocode, outDir, cachePath, today: TODAY });
   assert.equal(meta.count, 1);
-  assert.deepEqual(meta.skipped, { noAddr: 1, notOpen: 1, geocodeFailed: 1, geocodePending: 0 });
+  assert.deepEqual(meta.skipped, { noAddr: 1, notOpen: 1, outOfRegion: 0, geocodeFailed: 1, geocodePending: 0 });
 });
 
 test("counts addresses without a cache entry as pending", async () => {
@@ -98,4 +98,26 @@ test("keeps checkpointed cache when geocoding crashes", async () => {
   await assert.rejects(build({ fetchToilets: async () => [raw("1", "서울 A로 1")], geocode, outDir, cachePath, today: TODAY }), /timeout/);
   assert.deepEqual(readJson(cachePath), { "서울 A로 1": { lat: 37.5663, lng: 126.9779 } });
   assert.ok(!fs.existsSync(path.join(outDir, "meta.json")));
+});
+
+test("keeps only configured regions and reports them", async () => {
+  const { outDir, cachePath } = tmp();
+  const seen = [];
+  const geocode = async (addrs, cache) => {
+    seen.push(...addrs);
+    return { cache: Object.fromEntries(addrs.map((a) => [a, { lat: 37.5663, lng: 126.9779 }])), stats: {} };
+  };
+  const fetchToilets = async () => [raw("1", "서울특별시 중구 세종대로 110"), raw("2", "경기도 의정부시 민락로 273"), raw("3", "부산광역시 영도구 대평남로 8")];
+  const meta = await build({ fetchToilets, geocode, outDir, cachePath, today: TODAY, regions: ["서울", "경기"] });
+  assert.deepEqual(seen, ["서울특별시 중구 세종대로 110", "경기도 의정부시 민락로 273"]);
+  assert.equal(meta.count, 2);
+  assert.equal(meta.skipped.outOfRegion, 1);
+  assert.deepEqual(meta.regions, ["서울", "경기"]);
+});
+
+test("no regions means nationwide", async () => {
+  const { outDir, cachePath } = tmp();
+  const meta = await build({ fetchToilets: async () => [raw("3", "부산 B로 3")], geocode: fakeGeocode, outDir, cachePath, today: TODAY });
+  assert.equal(meta.count, 1);
+  assert.equal(meta.regions, undefined);
 });

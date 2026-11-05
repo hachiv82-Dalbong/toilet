@@ -1,5 +1,5 @@
 // 전체 빌드: API 수집 → 매핑 → 지오코딩(캐시) → 타일 JSON + meta.json
-//   node pipeline/build.js   (env: SERVICE_KEY, JUSO_SEARCH_KEY, JUSO_COORD_KEY, 선택 GEOCODE_BUDGET)
+//   node pipeline/build.js   (env: SERVICE_KEY, JUSO_SEARCH_KEY, JUSO_COORD_KEY, 선택 GEOCODE_BUDGET, REGIONS)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -8,6 +8,9 @@ import { mapRecord } from "./fields.js";
 import { hoursFromRecord } from "./parse-hours.js";
 import { geocodeAll, jusoGeocode } from "./geocode.js";
 import { TILE_DEG, tileKey } from "../web/js/tiles.js";
+
+// 지금은 서울·경기만 쓴다. 주소 앞글자로 거른다("서울특별시", "서울시", "경기도"). 전국으로 넓히려면 REGIONS를 빈 값으로 둔다.
+const DEFAULT_REGIONS = "서울,경기";
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const readJsonOr = (p, fallback) => (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : fallback);
@@ -32,15 +35,19 @@ function replaceOutput(outDir, tiles, meta) {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-export async function build({ fetchToilets, geocode, outDir, cachePath, today }) {
+export async function build({ fetchToilets, geocode, outDir, cachePath, today, regions }) {
   const raws = await fetchToilets();
-  const skipped = { noAddr: 0, notOpen: 0, geocodeFailed: 0, geocodePending: 0 };
+  const skipped = { noAddr: 0, notOpen: 0, outOfRegion: 0, geocodeFailed: 0, geocodePending: 0 };
 
   const byId = new Map();
   for (const raw of raws) {
     const rec = mapRecord(raw);
     if (!rec) {
       skipped.noAddr++;
+      continue;
+    }
+    if (regions && !regions.some((r) => rec.addr.startsWith(r))) {
+      skipped.outOfRegion++;
       continue;
     }
     const hours = hoursFromRecord(rec.hoursCategory, rec.hoursDetail);
@@ -89,7 +96,7 @@ export async function build({ fetchToilets, geocode, outDir, cachePath, today })
     count++;
   }
 
-  const meta = { updatedAt: today, tileDeg: TILE_DEG, count, skipped };
+  const meta = { updatedAt: today, tileDeg: TILE_DEG, count, skipped, ...(regions ? { regions } : {}) };
   replaceOutput(outDir, tiles, meta);
   return meta;
 }
@@ -110,6 +117,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // Actions 작업 제한(300분) 안에 타일 생성과 커밋까지 끝나도록 지오코딩은 시작 후 4시간에서 끊는다
   const deadline = Date.now() + Number(process.env.GEOCODE_MAX_MINUTES ?? 240) * 60000;
   const today = kstToday();
+  const regions = (process.env.REGIONS ?? DEFAULT_REGIONS).split(",").map((r) => r.trim()).filter(Boolean);
   try {
     const meta = await build({
       fetchToilets: () => fetchAllToilets({ serviceKey }),
@@ -128,6 +136,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       outDir: path.join(root, "web", "data"),
       cachePath: path.join(root, "pipeline", "cache", "geocode.json"),
       today,
+      regions: regions.length ? regions : undefined,
     });
     console.log("meta", JSON.stringify(meta));
   } catch (e) {
