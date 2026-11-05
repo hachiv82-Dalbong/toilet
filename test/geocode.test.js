@@ -73,6 +73,7 @@ test("stops after 20 consecutive errors", async () => {
   const { stats } = await run(addrs, {}, one);
   assert.equal(one.calls.length, 20);
   assert.equal(stats.pending, 30);
+  assert.equal(stats.lastError, "down");
 });
 
 test("searchKeyword drops building-name suffix after comma", () => {
@@ -164,4 +165,32 @@ test("jusoGeocode picks the exact road-address match among several", async () =>
   assert.ok(r && Math.abs(r[0] - 37.5663) < 1e-6);
   assert.ok(urls[0].includes("countPerPage=5"));
   assert.ok(urls[1].includes("buldMnnm=110"));
+});
+
+test("jusoGeocode treats E0007 as throttling, not as a missing address", async () => {
+  const fetchFn = async () => json({ results: { common: { errorCode: "E0007", errorMessage: "짧은 시간동안 다량의 주소검색 요청이 있습니다." } } });
+  await assert.rejects(jusoGeocode("서울특별시 중구 세종대로 110", KEYS, fetchFn), (e) => e.throttled === true);
+});
+
+test("backs off and retries the same address when throttled", async () => {
+  let attempts = 0;
+  const one = counter(async () => {
+    attempts++;
+    if (attempts === 1) throw Object.assign(new Error("E0007"), { throttled: true });
+    return [37, 127];
+  });
+  const { cache, stats } = await geocodeAll(["A"], {}, { geocodeOne: one, budget: 100, today: TODAY, delayMs: 0, throttleBackoffMs: 0 });
+  assert.deepEqual(cache.A, { lat: 37, lng: 127 });
+  assert.equal(stats.newOk, 1);
+  assert.equal(stats.pending, 0);
+});
+
+test("repeated throttling leaves the address pending, never cached as failed", async () => {
+  const one = counter(async () => {
+    throw Object.assign(new Error("E0007"), { throttled: true });
+  });
+  const { cache, stats } = await geocodeAll(["A"], {}, { geocodeOne: one, budget: 100, today: TODAY, delayMs: 0, throttleBackoffMs: 0 });
+  assert.equal(cache.A, undefined);
+  assert.equal(stats.pending, 1);
+  assert.equal(one.calls.length, 4); // 첫 시도 + 재시도 3번
 });
