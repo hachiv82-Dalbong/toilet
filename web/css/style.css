@@ -72,6 +72,10 @@ html, body {
   color: var(--muted);
 }
 
+.help {
+  margin: 0 0 12px;
+}
+
 .warning {
   margin: 0 0 10px;
   padding: 10px 12px;

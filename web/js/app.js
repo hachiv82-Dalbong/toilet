@@ -2,10 +2,11 @@ import { formatDistance, walkMinutes } from "./geo.js";
 import { tileKeysAround, loadTiles } from "./tiles.js";
 import { rankToilets, pickRecommendation } from "./pick.js";
 import { navLinks } from "./navlinks.js";
-import { locationMessage } from "./locate-error.js";
+import { locationMessage, locationHelp } from "./locate-error.js";
 import { createMap, pinsToDraw } from "./map.js";
 
 const SEOUL_CITY_HALL = { lat: 37.5663, lng: 126.9779 };
+const MIN_SEARCHING_MS = 700;
 const STATUS_LABEL = { open: "지금 열림", unknown: "운영시간 확인 필요", closed: "닫힘" };
 
 const card = document.getElementById("card");
@@ -31,8 +32,9 @@ async function fetchJson(url) {
   return res.json();
 }
 
-function showMessage(text, retryLabel) {
+function showMessage(text, retryLabel, help) {
   card.replaceChildren(el("p", "status-line", text));
+  if (help) card.append(el("p", "meta help", help));
   if (retryLabel) {
     const btn = el("button", "btn", retryLabel);
     btn.type = "button";
@@ -118,11 +120,14 @@ function notFoundMessage(meta) {
 
 async function start() {
   showMessage("가까운 화장실을 찾는 중…");
+  const startedAt = Date.now();
   let me;
   try {
     me = await locate();
   } catch (err) {
-    showMessage(locationMessage(err), "다시 시도");
+    // 거부 상태면 바로 실패해서 버튼이 안 눌린 것처럼 보이므로, 찾는 중 문구를 잠깐 보여 준다
+    await new Promise((r) => setTimeout(r, Math.max(0, MIN_SEARCHING_MS - (Date.now() - startedAt))));
+    showMessage(locationMessage(err), "다시 시도", locationHelp(err));
     return;
   }
   mapView.showMe(me);
