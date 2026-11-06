@@ -106,3 +106,32 @@ test("view says whether the map can be tapped", () => {
   assert.equal(createMap(undefined, "map", me).interactive, false);
   assert.equal(createMap(fakeMaps().api, "map", me).interactive, true);
 });
+
+function fakeMapsWithMarkers() {
+  const created = [];
+  const { api } = fakeMaps();
+  class Marker {
+    constructor(opts) {
+      created.push(opts);
+    }
+    setMap() {}
+  }
+  class Pair {}
+  Object.assign(api.maps, { Marker, Size: Pair, Point: Pair });
+  return { api, created };
+}
+
+test("recommended pin keeps its status class, so an unconfirmed toilet is never shown as open", () => {
+  const { api, created } = fakeMapsWithMarkers();
+  const view = createMap(api, "map", me);
+  const unknown = { id: "u", lat: 37.5, lng: 127, status: "unknown" };
+  view.setPins([unknown], unknown, () => {});
+  assert.match(created[0].icon.content, /class="pin unknown recommended"/);
+});
+
+test("other pins carry only their status class", () => {
+  const { api, created } = fakeMapsWithMarkers();
+  const view = createMap(api, "map", me);
+  view.setPins([{ id: "c", lat: 37.5, lng: 127, status: "closed" }], null, () => {});
+  assert.match(created[0].icon.content, /class="pin closed"/);
+});

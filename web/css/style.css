@@ -14,6 +14,9 @@
   --naver: #03a94f;
   --google: #3a76f0;
   --shadow: 0 -6px 24px rgba(0, 0, 0, 0.14);
+  --pin-open: #1f9d3a;
+  --pin-unknown: #f2b705;
+  --pin-closed: #7d838c;
 }
 
 * { box-sizing: border-box; }
@@ -68,7 +71,6 @@ html, body {
   border: 0;
   background: none;
   cursor: grab;
-  touch-action: none;
 }
 .grab::before {
   content: "";
@@ -97,6 +99,12 @@ html, body {
 }
 .sheet {
   transition: transform 0.15s ease-out;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#grab {
+  touch-action: none;
 }
 .sheet.dragging {
   transition: none;
@@ -223,8 +231,9 @@ html, body {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
-/* 36px는 터치 영역이고, 보이는 점은 ::after로 그린다 */
+/* 36px는 터치 영역이고, 보이는 점은 ::after로 그린다. 색만으로 구분되지 않도록 기호를 함께 넣는다. */
 .pin {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -233,14 +242,81 @@ html, body {
   cursor: pointer;
 }
 .pin::after {
-  content: "";
-  width: 18px;
-  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
 }
-.pin.open::after { background: #1f9d3a; }
-.pin.unknown::after { background: #f2b705; }
-.pin.closed::after { background: #9aa0a8; width: 14px; height: 14px; }
-.pin.recommended::after { background: #e8442e; width: 28px; height: 28px; border-width: 3px; }
+.pin.open::after { content: "✓"; background: var(--pin-open); color: #fff; }
+.pin.unknown::after { content: "?"; background: var(--pin-unknown); color: #3d2c00; }
+.pin.closed::after { content: "✕"; background: var(--pin-closed); color: #fff; font-size: 10px; }
+
+/* 추천: 크기와 글자로 구분하고, 색은 그 화장실의 상태를 그대로 쓴다 */
+.pin.recommended::after {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+  font-size: 18px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+.pin.recommended::before {
+  content: "추천";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: var(--text);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.legend {
+  position: fixed;
+  top: 26px;
+  left: 8px;
+  z-index: 900;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  max-width: calc(100vw - 16px);
+  margin: 0;
+  padding: 5px 9px;
+  list-style: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  pointer-events: none;
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.legend-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+}
+.legend-mark.me { background: #2b6cff; }
+.legend-mark.open { background: var(--pin-open); }
+.legend-mark.unknown { background: var(--pin-unknown); color: #3d2c00; }
+.legend-mark.closed { background: var(--pin-closed); font-size: 9px; }

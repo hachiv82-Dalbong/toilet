@@ -70,7 +70,7 @@ export function createMap(api, elementId, center) {
           map,
           position: latLng(t),
           zIndex: isRecommended ? 200 : 100,
-          icon: icon(`pin ${isRecommended ? "recommended" : t.status}`, PIN_SIZE),
+          icon: icon(`pin ${t.status}${isRecommended ? " recommended" : ""}`, PIN_SIZE),
         });
         maps.Event.addListener(marker, "click", () => onSelect(t));
         return marker;

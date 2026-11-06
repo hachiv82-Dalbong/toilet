@@ -11,6 +11,13 @@
 <body>
   <div id="map" aria-label="주변 화장실 지도"></div>
 
+  <ul class="legend" aria-label="핀 설명">
+    <li><span class="legend-mark me" aria-hidden="true"></span>내 위치</li>
+    <li><span class="legend-mark open" aria-hidden="true">✓</span>열림</li>
+    <li><span class="legend-mark unknown" aria-hidden="true">?</span>확인 필요</li>
+    <li><span class="legend-mark closed" aria-hidden="true">✕</span>닫힘</li>
+  </ul>
+
   <section id="sheet" class="sheet" aria-live="polite">
     <button type="button" id="grab" class="grab"></button>
     <div id="card" class="card">
