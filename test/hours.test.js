@@ -16,7 +16,7 @@ test("parse range variants", () => {
 });
 
 test("ambiguous -> unknown", () => {
-  for (const t of ["상시", "정시", "영업시간 내", "", null, "평일 09:00~18:00", "09:00~12:00, 13:00~18:00", "09:00~09:00"]) {
+  for (const t of ["정시", "영업시간 내", "", null, "평일 09:00~18:00", "09:00~12:00, 13:00~18:00", "09:00~09:00", "11시간", "1~12", "3-10"]) {
     assert.equal(parseHours(t).type, "unknown", String(t));
   }
 });
@@ -123,4 +123,33 @@ test("formatHours handles the real data's odd separators and placeholders", () =
   assert.equal(formatHours(u, ":~:"), "");
   assert.equal(formatHours(u, "-"), "");
   assert.equal(formatHours(u, "11시간"), "11시간");
+});
+
+test("parse shorthand ranges from the real data", () => {
+  const nineToSix = { type: "range", open: 540, close: 1080 };
+  for (const s of ["09~18시", "09~18", "9시~18", "09:00∼18:00"]) assert.deepEqual(parseHours(s), nineToSix, s);
+  assert.deepEqual(parseHours("08~20"), { type: "range", open: 480, close: 1200 });
+});
+
+test("parse clear all-day values", () => {
+  for (const s of ["00~24", "00:00~00:00", "00:00~23:50", "24시간 개방", "24시간 운영", "상시"]) assert.deepEqual(parseHours(s), { type: "24h" }, s);
+});
+
+test("a time in any other category field is still read", () => {
+  assert.deepEqual(hoursFromRecord("09:00~18:00", ""), { type: "range", open: 540, close: 1080 });
+  assert.deepEqual(hoursFromRecord("기타", "09:00~18:00"), { type: "range", open: 540, close: 1080 });
+  assert.deepEqual(hoursFromRecord("24시간", ""), { type: "24h" });
+  assert.deepEqual(hoursFromRecord("정시", "상시"), { type: "24h" });
+});
+
+test("conditional hours stay unknown so a closed toilet is never shown as open", () => {
+  for (const s of ["(평일)09:00~18:00", "(평일)09:00-18:00+(주말)09:00-18:00", "월~금 09~18시", "09:00~18:00 월요일 휴무"]) {
+    assert.equal(hoursFromRecord("정시", s).type, "unknown", s);
+    assert.equal(hoursFromRecord("", s).type, "unknown", s);
+  }
+});
+
+test("미개방 in the detail field also excludes the toilet", () => {
+  assert.equal(hoursFromRecord("정시", "미개방"), null);
+  assert.equal(hoursFromRecord("기타", " 미개방 "), null);
 });
