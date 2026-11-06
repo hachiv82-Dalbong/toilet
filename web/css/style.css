@@ -204,6 +204,12 @@ html, body {
   margin: 14px 0 4px;
 }
 
+/* 누르는 순간 눌린 느낌을 준다 */
+.navs a:active, .btn:active, .link-btn:active {
+  transform: scale(0.96);
+  filter: brightness(0.88);
+}
+
 .navs a, .btn {
   display: flex;
   align-items: center;
@@ -270,14 +276,19 @@ html, body {
 .pin.unknown::after { content: "?"; background: var(--pin-unknown); color: #3d2c00; }
 .pin.closed::after { content: "✕"; background: var(--pin-closed); color: #fff; font-size: 10px; }
 
-/* 추천: 크기와 글자로 구분하고, 색은 그 화장실의 상태를 그대로 쓴다 */
-.pin.recommended::after {
-  width: 32px;
-  height: 32px;
-  border-width: 3px;
+/* 지금 카드에 보이는 핀: 크게, 진한 테두리와 빛 번짐으로 눈에 띄게 한다 */
+.pin.selected::after {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--text);
+  box-shadow: 0 0 0 3px #fff, 0 0 0 7px rgba(43, 108, 255, 0.45), 0 2px 8px rgba(0, 0, 0, 0.45);
   font-size: 18px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
+.pin.closed.selected::after {
+  font-size: 15px;
+}
+
+/* 추천: 글자로 구분하고, 색은 그 화장실의 상태를 그대로 쓴다 */
 .pin.recommended::before {
   content: "추천";
   position: absolute;
@@ -291,6 +302,9 @@ html, body {
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+}
+.pin.selected.recommended::before {
+  bottom: calc(100% + 6px);
 }
 
 .legend {

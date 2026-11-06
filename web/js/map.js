@@ -64,15 +64,24 @@ export function createMap(api, elementId, center) {
     },
     setPins(pins, recommended, onSelect) {
       for (const m of pinMarkers) m.setMap(null);
+      const pinClass = (t, selected) => `pin ${t.status}${t === recommended ? " recommended" : ""}${selected ? " selected" : ""}`;
+      const zIndex = (t, selected) => (selected ? 250 : t === recommended ? 200 : 100);
+      let current = null; // 지금 카드에 보이는 화장실의 핀을 눈에 띄게 한다
+      const mark = (entry, selected) => {
+        entry.marker.setIcon(icon(pinClass(entry.toilet, selected), PIN_SIZE));
+        entry.marker.setZIndex(zIndex(entry.toilet, selected));
+      };
       pinMarkers = pins.map((t) => {
-        const isRecommended = t === recommended;
-        const marker = new maps.Marker({
-          map,
-          position: latLng(t),
-          zIndex: isRecommended ? 200 : 100,
-          icon: icon(`pin ${t.status}${isRecommended ? " recommended" : ""}`, PIN_SIZE),
+        const selected = t === recommended;
+        const marker = new maps.Marker({ map, position: latLng(t), zIndex: zIndex(t, selected), icon: icon(pinClass(t, selected), PIN_SIZE) });
+        const entry = { marker, toilet: t };
+        if (selected) current = entry;
+        maps.Event.addListener(marker, "click", () => {
+          if (current && current !== entry) mark(current, false);
+          mark(entry, true);
+          current = entry;
+          onSelect(t);
         });
-        maps.Event.addListener(marker, "click", () => onSelect(t));
         return marker;
       });
     },

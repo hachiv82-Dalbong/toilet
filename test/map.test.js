@@ -109,16 +109,23 @@ test("view says whether the map can be tapped", () => {
 
 function fakeMapsWithMarkers() {
   const created = [];
-  const { api } = fakeMaps();
+  const { api, listeners } = fakeMaps();
   class Marker {
     constructor(opts) {
+      this.icon = opts.icon;
       created.push(opts);
     }
     setMap() {}
+    setIcon(icon) {
+      this.icon = icon;
+    }
+    setZIndex(z) {
+      this.zIndex = z;
+    }
   }
   class Pair {}
   Object.assign(api.maps, { Marker, Size: Pair, Point: Pair });
-  return { api, created };
+  return { api, created, listeners };
 }
 
 test("recommended pin keeps its status class, so an unconfirmed toilet is never shown as open", () => {
@@ -126,7 +133,7 @@ test("recommended pin keeps its status class, so an unconfirmed toilet is never 
   const view = createMap(api, "map", me);
   const unknown = { id: "u", lat: 37.5, lng: 127, status: "unknown" };
   view.setPins([unknown], unknown, () => {});
-  assert.match(created[0].icon.content, /class="pin unknown recommended"/);
+  assert.match(created[0].icon.content, /class="pin unknown recommended selected"/);
 });
 
 test("other pins carry only their status class", () => {
@@ -134,4 +141,21 @@ test("other pins carry only their status class", () => {
   const view = createMap(api, "map", me);
   view.setPins([{ id: "c", lat: 37.5, lng: 127, status: "closed" }], null, () => {});
   assert.match(created[0].icon.content, /class="pin closed"/);
+});
+
+test("tapping a pin enlarges it and returns the previous one to normal size", () => {
+  const { api, listeners } = fakeMapsWithMarkers();
+  const view = createMap(api, "map", me);
+  const a = { id: "a", lat: 37.5, lng: 127, status: "open" };
+  const b = { id: "b", lat: 37.6, lng: 127, status: "closed" };
+  const selected = [];
+  view.setPins([a, b], a, (t) => selected.push(t.id));
+  const [ma, mb] = listeners.filter((l) => l.name === "click").map((l) => l);
+  assert.match(ma.target.icon.content, /class="pin open recommended selected"/);
+  assert.match(mb.target.icon.content, /class="pin closed"/);
+  mb.fn();
+  assert.deepEqual(selected, ["b"]);
+  assert.match(mb.target.icon.content, /class="pin closed selected"/);
+  assert.match(ma.target.icon.content, /class="pin open recommended"/);
+  assert.ok(mb.target.zIndex > ma.target.zIndex);
 });
