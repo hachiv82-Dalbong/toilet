@@ -152,14 +152,16 @@ html, body {
   margin: 0 0 12px;
 }
 
-.warning {
-  margin: 0 0 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--unk-bg);
-  color: var(--unk-fg);
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.hours {
   font-size: 14px;
-  line-height: 1.4;
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .badge {

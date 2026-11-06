@@ -63,14 +63,14 @@ function openNaver(event, link, addr) {
   }, 1500);
 }
 
-function showToilet(t, warning) {
+function showToilet(t) {
   const nodes = [];
-  if (warning) nodes.push(el("p", "warning", `열려 있는지 확인되지 않았어요. 개방시간: ${t.hoursText || "정보 없음"}`));
-  nodes.push(el("span", `badge ${t.status}`, STATUS_LABEL[t.status]));
+  const statusRow = el("div", "status-row");
+  statusRow.append(el("span", `badge ${t.status}`, STATUS_LABEL[t.status]), el("span", "hours", t.hoursText || "개방시간 정보 없음"));
+  nodes.push(statusRow);
   nodes.push(el("h1", "name", t.name));
   nodes.push(el("p", "dist", `${formatDistance(t.distance)} · 도보 약 ${walkMinutes(t.distance)}분`));
   nodes.push(el("p", "addr", t.addr));
-  if (t.hoursText) nodes.push(el("p", "meta", `개방시간: ${t.hoursText}`));
   const fac = facilitiesText(t.facilities ?? {});
   if (fac) nodes.push(el("p", "meta", fac));
 
@@ -175,13 +175,13 @@ async function showNearest(me) {
   }
   const { ranked, pick } = found;
   // 카드를 먼저 그린다. 지도에 문제가 있어도 가장 가까운 화장실은 알 수 있어야 한다.
-  if (pick) showToilet(pick.toilet, pick.warning);
+  if (pick) showToilet(pick.toilet);
   else {
     showMessage(notFoundMessage(await metaLoaded));
     if (mapView.interactive) card.append(repickButton());
   }
   mapView.setPins(pinsToDraw(ranked, pick?.toilet), pick?.toilet, (t) => {
-    showToilet(t, t.status === "unknown");
+    showToilet(t);
     sheetControl.expand(); // 핀을 누르면 길찾기 버튼까지 보이게 펼친다
     mapView.focus(t, sheet.offsetHeight);
   });

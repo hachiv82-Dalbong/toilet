@@ -21,19 +21,16 @@ test("rankToilets sorts by distance and adds status", () => {
 test("nearest open within radius wins over closer unknown", () => {
   const r = pick([T("u", 100, UNK), T("o", 400, OPEN)]);
   assert.equal(r.toilet.id, "o");
-  assert.equal(r.warning, false);
 });
 
-test("no open nearby -> nearest unknown with warning", () => {
+test("no open nearby -> nearest unknown", () => {
   const r = pick([T("c", 50, CLOSED), T("u", 300, UNK), T("o", 2000, OPEN)]);
   assert.equal(r.toilet.id, "u");
-  assert.equal(r.warning, true);
 });
 
 test("nothing within radius -> nearest open/unknown anywhere", () => {
   const r = pick([T("c", 50, CLOSED), T("o", 3000, OPEN), T("u", 5000, UNK)]);
   assert.equal(r.toilet.id, "o");
-  assert.equal(r.warning, false);
 });
 
 test("never recommends closed; null when none", () => {

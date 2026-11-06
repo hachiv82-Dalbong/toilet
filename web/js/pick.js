@@ -11,9 +11,9 @@ export function rankToilets(toilets, me, now) {
 export function pickRecommendation(ranked, nearRadius = 700) {
   const near = ranked.filter((t) => t.distance <= nearRadius);
   const nearOpen = near.find((t) => t.status === "open");
-  if (nearOpen) return { toilet: nearOpen, warning: false };
+  if (nearOpen) return { toilet: nearOpen };
   const nearUnknown = near.find((t) => t.status === "unknown");
-  if (nearUnknown) return { toilet: nearUnknown, warning: true };
+  if (nearUnknown) return { toilet: nearUnknown };
   const any = ranked.find((t) => t.status !== "closed");
-  return any ? { toilet: any, warning: any.status === "unknown" } : null;
+  return any ? { toilet: any } : null;
 }
