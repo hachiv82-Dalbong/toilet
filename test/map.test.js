@@ -69,3 +69,40 @@ test("frame passes south-west then north-east corners wherever the toilet is", (
   assert.deepEqual([corners.sw.lat, corners.sw.lng], [me.lat, 126.9]);
   assert.deepEqual([corners.ne.lat, corners.ne.lng], [37.6, me.lng]);
 });
+
+function fakeMaps() {
+  const listeners = [];
+  class LatLng {
+    constructor(lat, lng) {
+      Object.assign(this, { lat, lng });
+    }
+  }
+  class FakeMap {}
+  const api = { maps: { Map: FakeMap, LatLng, Position: {}, Event: { addListener: (target, name, fn) => listeners.push({ target, name, fn }) } } };
+  const tap = (lat, lng) => listeners.filter((l) => l.name === "click").forEach((l) => l.fn({ coord: { lat: () => lat, lng: () => lng } }));
+  return { api, tap, listeners };
+}
+
+test("onPick reports the tapped location", () => {
+  const { api, tap } = fakeMaps();
+  const view = createMap(api, "map", me);
+  const picked = [];
+  view.onPick((p) => picked.push(p));
+  tap(37.5, 127.1);
+  assert.deepEqual(picked, [{ lat: 37.5, lng: 127.1 }]);
+});
+
+test("onPick(null) stops reporting taps", () => {
+  const { api, tap } = fakeMaps();
+  const view = createMap(api, "map", me);
+  const picked = [];
+  view.onPick((p) => picked.push(p));
+  view.onPick(null);
+  tap(37.5, 127.1);
+  assert.deepEqual(picked, []);
+});
+
+test("view says whether the map can be tapped", () => {
+  assert.equal(createMap(undefined, "map", me).interactive, false);
+  assert.equal(createMap(fakeMaps().api, "map", me).interactive, true);
+});

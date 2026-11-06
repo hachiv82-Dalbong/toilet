@@ -14,6 +14,7 @@ const sheet = document.getElementById("sheet");
 const source = document.getElementById("source");
 const mapView = createMap(window.naver, "map", SEOUL_CITY_HALL);
 const metaLoaded = fetchJson("data/meta.json").catch(() => null);
+let pickedByHand = false;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -32,8 +33,9 @@ async function fetchJson(url) {
   return res.json();
 }
 
-function showMessage(text, retryLabel, help) {
+function showMessage(text, retryLabel, help, hint) {
   card.replaceChildren(el("p", "status-line", text));
+  if (hint) card.append(el("p", "pick-hint", hint));
   if (help) card.append(el("p", "meta help", help));
   if (retryLabel) {
     const btn = el("button", "btn", retryLabel);
@@ -81,7 +83,27 @@ function showToilet(t, warning) {
     navs.append(a);
   }
   nodes.push(navs);
+  if (pickedByHand) nodes.push(repickButton());
   card.replaceChildren(...nodes);
+}
+
+// 위치 권한이 없어도 쓸 수 있도록 지도를 눌러 내 위치를 정한다
+function startPicking() {
+  mapView.onPick((p) => {
+    mapView.onPick(null);
+    pickedByHand = true;
+    showNearest(p);
+  });
+}
+
+function repickButton() {
+  const btn = el("button", "link-btn", "내 위치 다시 찍기");
+  btn.type = "button";
+  btn.addEventListener("click", () => {
+    showMessage("지도에서 내 위치를 눌러 주세요");
+    startPicking();
+  });
+  return btn;
 }
 
 function locate() {
@@ -119,6 +141,8 @@ function notFoundMessage(meta) {
 }
 
 async function start() {
+  mapView.onPick(null);
+  pickedByHand = false;
   showMessage("가까운 화장실을 찾는 중…");
   const startedAt = Date.now();
   let me;
@@ -127,9 +151,16 @@ async function start() {
   } catch (err) {
     // 거부 상태면 바로 실패해서 버튼이 안 눌린 것처럼 보이므로, 찾는 중 문구를 잠깐 보여 준다
     await new Promise((r) => setTimeout(r, Math.max(0, MIN_SEARCHING_MS - (Date.now() - startedAt))));
-    showMessage(locationMessage(err), "다시 시도", locationHelp(err));
+    const hint = mapView.interactive ? "지도를 눌러 내 위치를 직접 정할 수 있어요." : null;
+    showMessage(locationMessage(err), "다시 시도", locationHelp(err), hint);
+    if (hint) startPicking();
     return;
   }
+  await showNearest(me);
+}
+
+async function showNearest(me) {
+  showMessage("가까운 화장실을 찾는 중…");
   mapView.showMe(me);
   let found;
   try {
@@ -142,7 +173,10 @@ async function start() {
   const { ranked, pick } = found;
   // 카드를 먼저 그린다. 지도에 문제가 있어도 가장 가까운 화장실은 알 수 있어야 한다.
   if (pick) showToilet(pick.toilet, pick.warning);
-  else showMessage(notFoundMessage(await metaLoaded));
+  else {
+    showMessage(notFoundMessage(await metaLoaded));
+    if (pickedByHand) card.append(repickButton());
+  }
   mapView.setPins(pinsToDraw(ranked, pick?.toilet), pick?.toilet, (t) => showToilet(t, t.status === "unknown"));
   if (pick) mapView.frame(me, pick.toilet, sheet.offsetHeight + 24);
   else mapView.center(me);

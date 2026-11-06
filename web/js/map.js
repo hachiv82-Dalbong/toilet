@@ -13,7 +13,7 @@ export function pinsToDraw(ranked, recommended, limit = MAX_PINS) {
   return pins;
 }
 
-const NOOP_VIEW = { showMe() {}, setPins() {}, frame() {}, center() {} };
+const NOOP_VIEW = { showMe() {}, setPins() {}, frame() {}, center() {}, onPick() {}, interactive: false };
 
 function safely(view) {
   const guard = (fn) => (...args) => {
@@ -54,8 +54,10 @@ export function createMap(api, elementId, center) {
 
   let meMarker = null;
   let pinMarkers = [];
+  let pickHandler = null;
+  let listeningForPick = false;
 
-  return safely({
+  const view = safely({
     showMe(me) {
       if (meMarker) meMarker.setMap(null);
       meMarker = new maps.Marker({ map, position: latLng(me), clickable: false, zIndex: 300, icon: icon("me-dot", ME_SIZE) });
@@ -89,5 +91,14 @@ export function createMap(api, elementId, center) {
       map.setCenter(latLng(me));
       map.setZoom(DEFAULT_ZOOM);
     },
+    // 위치 권한이 없을 때 지도를 눌러 내 위치를 정한다. null이면 그만 받는다.
+    onPick(handler) {
+      pickHandler = handler;
+      if (handler && !listeningForPick) {
+        maps.Event.addListener(map, "click", (e) => pickHandler?.({ lat: e.coord.lat(), lng: e.coord.lng() }));
+        listeningForPick = true;
+      }
+    },
   });
+  return { ...view, interactive: true };
 }
