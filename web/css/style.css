@@ -28,6 +28,9 @@ html, body {
   color: var(--text);
   font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
   -webkit-text-size-adjust: 100%;
+  /* 카드를 끌 때 페이지 전체가 출렁이지 않게 한다 */
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* 네이버 지도가 position을 직접 덮어쓰므로 크기는 width/height로 정한다 */
@@ -82,32 +85,41 @@ html, body {
   background: #c4c8cf;
 }
 
-/* 접으면 이름과 거리만 남기고 지도를 넓게 보여 준다 */
-.sheet.collapsed .warning,
-.sheet.collapsed .addr,
-.sheet.collapsed .meta,
-.sheet.collapsed .navs,
-.sheet.collapsed .link-btn,
-.sheet.collapsed .pick-hint ~ .help,
-.sheet.collapsed .btn,
-.sheet.collapsed .source {
-  display: none;
-}
-.sheet.collapsed .dist {
-  font-size: 18px;
-  margin-bottom: 0;
-}
 .sheet {
-  transition: transform 0.15s ease-out;
-  touch-action: pan-y;
+  /* 접고 펼칠 때 부드럽게 미끄러진다 */
+  transition: transform 0.28s cubic-bezier(0.22, 0.8, 0.24, 1);
+  will-change: transform;
+  overscroll-behavior: contain;
+  -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
 }
 #grab {
   touch-action: none;
 }
+.sheet a {
+  -webkit-user-drag: none;
+}
 .sheet.dragging {
   transition: none;
+}
+/* 접힌 동안 아래쪽 내용은 서서히 흐려져서 잘린 글자가 보이지 않게 한다 */
+.addr, .meta, .navs, .link-btn, .btn, .source {
+  transition: opacity 0.2s ease-out;
+}
+.sheet.collapsed .addr,
+.sheet.collapsed .meta,
+.sheet.collapsed .navs,
+.sheet.collapsed .link-btn,
+.sheet.collapsed .btn,
+.sheet.collapsed .source {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    transition: none;
+  }
 }
 
 .status-line {
