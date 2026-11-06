@@ -85,12 +85,13 @@ function showToilet(t, warning) {
     navs.append(a);
   }
   nodes.push(navs);
-  if (pickedByHand) nodes.push(repickButton());
+  if (mapView.interactive) nodes.push(repickButton());
   card.replaceChildren(...nodes);
 }
 
-// 위치 권한이 없어도 쓸 수 있도록 지도를 눌러 내 위치를 정한다
+// 위치 권한이 없거나 위치가 부정확할 때 지도를 눌러 내 위치를 정한다
 function startPicking() {
+  mapView.setPins([]); // 핀 위를 눌러도 위치가 정해지도록 잠시 숨긴다
   mapView.onPick((p) => {
     mapView.onPick(null);
     pickedByHand = true;
@@ -99,10 +100,10 @@ function startPicking() {
 }
 
 function repickButton() {
-  const btn = el("button", "link-btn", "내 위치 다시 찍기");
+  const btn = el("button", "link-btn", pickedByHand ? "내 위치 다시 찍기" : "내 위치 직접 찍기");
   btn.type = "button";
   btn.addEventListener("click", () => {
-    showMessage("지도에서 내 위치를 눌러 주세요");
+    showMessage("지도에서 내 위치를 눌러 주세요", "현재 위치 사용");
     startPicking();
   });
   return btn;
@@ -177,7 +178,7 @@ async function showNearest(me) {
   if (pick) showToilet(pick.toilet, pick.warning);
   else {
     showMessage(notFoundMessage(await metaLoaded));
-    if (pickedByHand) card.append(repickButton());
+    if (mapView.interactive) card.append(repickButton());
   }
   mapView.setPins(pinsToDraw(ranked, pick?.toilet), pick?.toilet, (t) => {
     showToilet(t, t.status === "unknown");
