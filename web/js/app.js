@@ -183,6 +183,7 @@ async function showNearest(me) {
   mapView.setPins(pinsToDraw(ranked, pick?.toilet), pick?.toilet, (t) => {
     showToilet(t, t.status === "unknown");
     sheetControl.expand(); // 핀을 누르면 길찾기 버튼까지 보이게 펼친다
+    mapView.focus(t, sheet.offsetHeight);
   });
   if (pick) mapView.frame(me, pick.toilet, sheet.offsetHeight + 24);
   else mapView.center(me);

@@ -159,3 +159,34 @@ test("tapping a pin enlarges it and returns the previous one to normal size", ()
   assert.match(ma.target.icon.content, /class="pin open recommended"/);
   assert.ok(mb.target.zIndex > ma.target.zIndex);
 });
+
+test("focus centers the toilet in the part of the map the card leaves visible", () => {
+  const { api } = fakeMapsWithMarkers();
+  let pannedTo = null;
+  class Point {
+    constructor(x, y) {
+      Object.assign(this, { x, y });
+    }
+  }
+  api.maps.Point = Point;
+  api.maps.Map = class {
+    // 좌표계를 단순화: 위도 = y, 경도 = x
+    getProjection() {
+      return {
+        fromCoordToOffset: (c) => new Point(c.lng, c.lat),
+        fromOffsetToCoord: (p) => new api.maps.LatLng(p.y, p.x),
+      };
+    }
+    panTo(coord) {
+      pannedTo = coord;
+    }
+  };
+  const view = createMap(api, "map", me);
+  view.focus({ lat: 100, lng: 50 }, 300);
+  // 카드 높이의 절반만큼 지도 중심을 아래로 옮겨야 핀이 보이는 영역의 가운데에 온다
+  assert.deepEqual([pannedTo.lat, pannedTo.lng], [250, 50]);
+});
+
+test("focus is safe when the map is unavailable", () => {
+  assert.doesNotThrow(() => createMap(undefined, "map", me).focus({ lat: 1, lng: 2 }, 100));
+});

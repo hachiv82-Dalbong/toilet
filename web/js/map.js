@@ -13,7 +13,7 @@ export function pinsToDraw(ranked, recommended, limit = MAX_PINS) {
   return pins;
 }
 
-const NOOP_VIEW = { showMe() {}, setPins() {}, frame() {}, center() {}, onPick() {}, interactive: false };
+const NOOP_VIEW = { showMe() {}, setPins() {}, frame() {}, center() {}, focus() {}, onPick() {}, interactive: false };
 
 function safely(view) {
   const guard = (fn) => (...args) => {
@@ -99,6 +99,13 @@ export function createMap(api, elementId, center) {
     center(me) {
       map.setCenter(latLng(me));
       map.setZoom(DEFAULT_ZOOM);
+    },
+    // 핀이 카드에 가리지 않도록, 카드를 뺀 나머지 지도 영역의 가운데로 옮긴다
+    focus(t, bottomMargin) {
+      const projection = map.getProjection();
+      const offset = projection.fromCoordToOffset(latLng(t));
+      const target = projection.fromOffsetToCoord(new maps.Point(offset.x, offset.y + bottomMargin / 2));
+      map.panTo(target, { duration: 300, easing: "easeOutCubic" });
     },
     // 위치 권한이 없을 때 지도를 눌러 내 위치를 정한다. null이면 그만 받는다.
     onPick(handler) {
