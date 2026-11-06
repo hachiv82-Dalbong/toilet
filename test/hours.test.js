@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseHours, hoursFromRecord } from "../pipeline/parse-hours.js";
-import { openStatus } from "../web/js/hours.js";
+import { openStatus, formatHours } from "../web/js/hours.js";
 
 const kst = (h, m = 0) => new Date(Date.UTC(2026, 10, 3, h - 9, m)); // KST h:m
 
@@ -79,4 +79,48 @@ test("상시 with conflicting detail follows the detail", () => {
   assert.equal(hoursFromRecord("상시", "동절기 폐쇄").type, "unknown");
   assert.deepEqual(hoursFromRecord("상시", "연중무휴"), { type: "24h" });
   assert.deepEqual(hoursFromRecord("상시", "24시간"), { type: "24h" });
+});
+
+test("formatHours writes parsed ranges as HH:MM-HH:MM", () => {
+  assert.equal(formatHours({ type: "range", open: 540, close: 1080 }, "9시~18시"), "09:00-18:00");
+  assert.equal(formatHours({ type: "range", open: 360, close: 1440 }, "06:00~24:00"), "06:00-24:00");
+  assert.equal(formatHours({ type: "range", open: 300, close: 60 }, "05:00~25:00"), "05:00-01:00");
+});
+
+test("formatHours writes always-open as a full day", () => {
+  assert.equal(formatHours({ type: "24h" }, "상시"), "00:00-24:00");
+});
+
+test("formatHours tidies times inside text it could not interpret", () => {
+  const u = { type: "unknown" };
+  assert.equal(formatHours(u, "08~20"), "08:00-20:00");
+  assert.equal(formatHours(u, "(평일)9:00~18:00"), "(평일)09:00-18:00");
+  assert.equal(formatHours(u, "09:00 ~ 18:00, 법정공휴일 제외"), "09:00-18:00, 법정공휴일 제외");
+  assert.equal(formatHours(u, "09:00-12:00, 13시-18시"), "09:00-12:00, 13:00-18:00");
+});
+
+test("formatHours leaves non-times alone", () => {
+  const u = { type: "unknown" };
+  assert.equal(formatHours(u, "근무시간 내"), "근무시간 내");
+  assert.equal(formatHours(u, "3-10월 개방"), "3-10월 개방");
+  assert.equal(formatHours(u, "1~12"), "1~12");
+  assert.equal(formatHours(u, "010-1234-5678"), "010-1234-5678");
+});
+
+test("formatHours has nothing to say for an empty or category-only value", () => {
+  const u = { type: "unknown" };
+  assert.equal(formatHours(u, ""), "");
+  assert.equal(formatHours(u, "정시"), "");
+});
+
+test("formatHours handles the real data's odd separators and placeholders", () => {
+  const u = { type: "unknown" };
+  assert.equal(formatHours(u, "09:00∼18:00"), "09:00-18:00");
+  assert.equal(formatHours(u, "10~22시"), "10:00-22:00");
+  assert.equal(formatHours(u, "00~24"), "00:00-24:00");
+  assert.equal(formatHours(u, "(평일)09:00-18:00+(주말)09:00-18:00"), "(평일)09:00-18:00+(주말)09:00-18:00");
+  assert.equal(formatHours(u, "24시간 개방"), "00:00-24:00");
+  assert.equal(formatHours(u, ":~:"), "");
+  assert.equal(formatHours(u, "-"), "");
+  assert.equal(formatHours(u, "11시간"), "11시간");
 });

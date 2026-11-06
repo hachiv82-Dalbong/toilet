@@ -2,6 +2,7 @@ import { formatDistance, walkMinutes } from "./geo.js";
 import { tileKeysAround, loadTiles } from "./tiles.js";
 import { rankToilets, pickRecommendation } from "./pick.js";
 import { navLinks } from "./navlinks.js";
+import { formatHours } from "./hours.js";
 import { locationMessage, locationHelp } from "./locate-error.js";
 import { createMap, pinsToDraw } from "./map.js";
 import { attachSheet } from "./sheet.js";
@@ -66,7 +67,7 @@ function openNaver(event, link, addr) {
 function showToilet(t) {
   const nodes = [];
   const statusRow = el("div", "status-row");
-  statusRow.append(el("span", `badge ${t.status}`, STATUS_LABEL[t.status]), el("span", "hours", t.hoursText || "개방시간 정보 없음"));
+  statusRow.append(el("span", `badge ${t.status}`, STATUS_LABEL[t.status]), el("span", "hours", formatHours(t.hours, t.hoursText) || "개방시간 정보 없음"));
   nodes.push(statusRow);
   nodes.push(el("h1", "name", t.name));
   nodes.push(el("p", "dist", `${formatDistance(t.distance)} · 도보 약 ${walkMinutes(t.distance)}분`));
