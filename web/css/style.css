@@ -58,12 +58,48 @@ html, body {
   }
 }
 
+/* 손잡이: 보이는 막대는 작아도 손가락으로 잡기 쉽게 영역을 넓힌다. 끄는 동안 페이지가 움직이지 않게 한다. */
 .grab {
-  width: 36px;
-  height: 4px;
-  margin: 0 auto 10px;
-  border-radius: 2px;
-  background: var(--line);
+  display: block;
+  width: calc(100% + 32px);
+  height: 32px;
+  margin: -8px -16px 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+}
+.grab::before {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 5px;
+  margin: 0 auto;
+  border-radius: 3px;
+  background: #c4c8cf;
+}
+
+/* 접으면 이름과 거리만 남기고 지도를 넓게 보여 준다 */
+.sheet.collapsed .warning,
+.sheet.collapsed .addr,
+.sheet.collapsed .meta,
+.sheet.collapsed .navs,
+.sheet.collapsed .link-btn,
+.sheet.collapsed .pick-hint ~ .help,
+.sheet.collapsed .btn,
+.sheet.collapsed .source {
+  display: none;
+}
+.sheet.collapsed .dist {
+  font-size: 18px;
+  margin-bottom: 0;
+}
+.sheet {
+  transition: transform 0.15s ease-out;
+}
+.sheet.dragging {
+  transition: none;
 }
 
 .status-line {

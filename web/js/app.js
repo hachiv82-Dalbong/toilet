@@ -4,6 +4,7 @@ import { rankToilets, pickRecommendation } from "./pick.js";
 import { navLinks } from "./navlinks.js";
 import { locationMessage, locationHelp } from "./locate-error.js";
 import { createMap, pinsToDraw } from "./map.js";
+import { attachSheet } from "./sheet.js";
 
 const SEOUL_CITY_HALL = { lat: 37.5663, lng: 126.9779 };
 const MIN_SEARCHING_MS = 700;
@@ -12,6 +13,7 @@ const STATUS_LABEL = { open: "지금 열림", unknown: "운영시간 확인 필�
 const card = document.getElementById("card");
 const sheet = document.getElementById("sheet");
 const source = document.getElementById("source");
+const sheetControl = attachSheet(sheet, document.getElementById("grab"));
 const mapView = createMap(window.naver, "map", SEOUL_CITY_HALL);
 const metaLoaded = fetchJson("data/meta.json").catch(() => null);
 let pickedByHand = false;
@@ -177,7 +179,10 @@ async function showNearest(me) {
     showMessage(notFoundMessage(await metaLoaded));
     if (pickedByHand) card.append(repickButton());
   }
-  mapView.setPins(pinsToDraw(ranked, pick?.toilet), pick?.toilet, (t) => showToilet(t, t.status === "unknown"));
+  mapView.setPins(pinsToDraw(ranked, pick?.toilet), pick?.toilet, (t) => {
+    showToilet(t, t.status === "unknown");
+    sheetControl.expand(); // 핀을 누르면 길찾기 버튼까지 보이게 펼친다
+  });
   if (pick) mapView.frame(me, pick.toilet, sheet.offsetHeight + 24);
   else mapView.center(me);
 }
